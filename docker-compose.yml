@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  ms-products:
+    build: .
+    container_name: ms-products
+    ports:
+      - "8081:8081"
+    environment:
+      - SERVER_PORT=8081
+      - DB_HOST=mysql-products
+      - DB_PORT=3306
+      - DB_USER=products_user
+      - DB_PASSWORD=products_password
+      - JWT_ISSUER_URI=${JWT_ISSUER_URI}
+      - MS_CONFIG_BASE_URL=${MS_CONFIG_BASE_URL:-http://host.docker.internal:8080}
+      - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-http://localhost:5173,http://localhost:4200}
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - PRODUCT_IMAGES_BUCKET=${PRODUCT_IMAGES_BUCKET:-}
+    depends_on:
+      mysql-products:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - printworks-products-network
+
+  mysql-products:
+    image: mysql:8.0
+    container_name: products-db
+    ports:
+      - "3307:3306"
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_password
+      - MYSQL_DATABASE=products_db
+      - MYSQL_USER=products_user
+      - MYSQL_PASSWORD=products_password
+    volumes:
+      - mysql-products-data:/var/lib/mysql
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - printworks-products-network
+
+volumes:
+  mysql-products-data:
+
+networks:
+  printworks-products-network:
+    driver: bridge
