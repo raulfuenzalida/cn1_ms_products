@@ -22,6 +22,7 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Slf4j
@@ -36,8 +37,11 @@ public class ProductService {
 	public ProductResponse createProduct(ProductCreateRequest request) {
 		log.info("Creando producto: {}", request.getName());
 
-		FilamentResponse filament = configServiceClient.getFilamentById(request.getIdFilament());
-		PrintingConfigResponse printingConfig = configServiceClient.getPrintingConfig();
+		FilamentResponse filament =
+			configServiceClient.getFilamentById(request.getIdFilament());
+
+		PrintingConfigResponse printingConfig =
+			configServiceClient.getPrintingConfig();
 
 		PriceCalculator.PriceBreakdown breakdown = PriceCalculator.calculate(
 			request.getFilamentGrams(),
@@ -49,6 +53,7 @@ public class ProductService {
 		);
 
 		Product product = new Product();
+
 		product.setName(request.getName());
 		product.setDescription(request.getDescription());
 		product.setIdFilament(request.getIdFilament());
@@ -57,8 +62,12 @@ public class ProductService {
 		product.setProfitPercentage(request.getProfitPercentage());
 
 		product.setFilamentPriceSnapshot(filament.getPricePerKg());
-		product.setElectricityPriceSnapshot(printingConfig.getElectricityPriceKwh());
-		product.setConsumptionKwhSnapshot(printingConfig.getPrinterConsumptionKwh());
+		product.setElectricityPriceSnapshot(
+			printingConfig.getElectricityPriceKwh()
+		);
+		product.setConsumptionKwhSnapshot(
+			printingConfig.getPrinterConsumptionKwh()
+		);
 
 		product.setMaterialCost(breakdown.materialCost());
 		product.setElectricityCost(breakdown.electricityCost());
@@ -70,6 +79,7 @@ public class ProductService {
 		product.setPriceStatus(PriceStatus.CURRENT);
 
 		Product saved = productRepository.save(product);
+
 		log.info("Producto creado con ID: {}", saved.getId());
 
 		return mapToResponse(saved);
@@ -79,47 +89,138 @@ public class ProductService {
 	public ProductResponse getProductById(Long id) {
 		Product product = productRepository.findById(id)
 			.orElseThrow(() -> new ProductNotFoundException(id));
+
 		return mapToResponse(product);
 	}
 
 	@Transactional(readOnly = true)
 	public ProductPublicResponse getPublicProductById(Long id) {
-		Product product = productRepository.findByIdAndStatusAndPriceStatus(id, ProductStatus.ACTIVE, PriceStatus.CURRENT)
+		Product product = productRepository
+			.findByIdAndStatusAndPriceStatus(
+				id,
+				ProductStatus.ACTIVE,
+				PriceStatus.CURRENT
+			)
 			.orElseThrow(() -> new ProductNotFoundException(id));
+
 		return mapToPublicResponse(product);
 	}
 
 	@Transactional
-	public ProductResponse updateProduct(Long id, ProductUpdateRequest request) {
+	public ProductResponse updateProduct(
+			Long id,
+			ProductUpdateRequest request) {
+
 		log.info("Actualizando producto: {}", id);
 
 		Product product = productRepository.findById(id)
 			.orElseThrow(() -> new ProductNotFoundException(id));
 
+		boolean priceAffected = false;
+
 		if (request.getName() != null) {
 			product.setName(request.getName());
 		}
+
 		if (request.getDescription() != null) {
 			product.setDescription(request.getDescription());
 		}
-		if (request.getProfitPercentage() != null) {
-			product.setProfitPercentage(request.getProfitPercentage());
-			recalculatePrice(product);
+
+		if (
+			request.getIdFilament() != null &&
+			!request.getIdFilament().equals(product.getIdFilament())
+		) {
+			// Valida que el nuevo filamento exista antes de modificar
+			// el producto.
+			configServiceClient.getFilamentById(
+				request.getIdFilament()
+			);
+
+			product.setIdFilament(
+				request.getIdFilament()
+			);
+
+			priceAffected = true;
 		}
 
-		Product saved = productRepository.save(product);
+		if (
+			request.getFilamentGrams() != null &&
+			hasChanged(
+				product.getFilamentGrams(),
+				request.getFilamentGrams()
+			)
+		) {
+			product.setFilamentGrams(
+				request.getFilamentGrams()
+			);
+
+			priceAffected = true;
+		}
+
+		if (
+			request.getPrintingHours() != null &&
+			hasChanged(
+				product.getPrintingHours(),
+				request.getPrintingHours()
+			)
+		) {
+			product.setPrintingHours(
+				request.getPrintingHours()
+			);
+
+			priceAffected = true;
+		}
+
+		if (
+			request.getProfitPercentage() != null &&
+			hasChanged(
+				product.getProfitPercentage(),
+				request.getProfitPercentage()
+			)
+		) {
+			product.setProfitPercentage(
+				request.getProfitPercentage()
+			);
+
+			priceAffected = true;
+		}
+
+		if (priceAffected) {
+			recalculatePrice(product);
+
+			product.setPriceStatus(
+				PriceStatus.CURRENT
+			);
+
+			product.setStatus(
+				ProductStatus.INACTIVE
+			);
+		}
+
+		Product saved =
+			productRepository.save(product);
+
 		return mapToResponse(saved);
 	}
 
 	@Transactional
-	public ProductResponse updateProductStatus(Long id, ProductStatus status) {
-		log.info("Actualizando estado del producto {} a {}", id, status);
+	public ProductResponse updateProductStatus(
+			Long id,
+			ProductStatus status) {
+
+		log.info(
+			"Actualizando estado del producto {} a {}",
+			id,
+			status
+		);
 
 		Product product = productRepository.findById(id)
 			.orElseThrow(() -> new ProductNotFoundException(id));
 
 		product.setStatus(status);
-		Product saved = productRepository.save(product);
+
+		Product saved =
+			productRepository.save(product);
 
 		return mapToResponse(saved);
 	}
@@ -131,13 +232,16 @@ public class ProductService {
 		Product product = productRepository.findById(id)
 			.orElseThrow(() -> new ProductNotFoundException(id));
 
-		int previousPrice = product.getFinalPrice().intValue();
+		int previousPrice =
+			product.getFinalPrice().intValue();
+
 		recalculatePrice(product);
 
 		product.setPriceStatus(PriceStatus.CURRENT);
 		product.setStatus(ProductStatus.INACTIVE);
 
-		Product saved = productRepository.save(product);
+		Product saved =
+			productRepository.save(product);
 
 		return new RecalculationResultResponse(
 			saved.getId(),
@@ -152,20 +256,39 @@ public class ProductService {
 
 	@Transactional
 	public RecalculationResultResponse recalculateOutdatedProducts() {
-		log.info("Recalculando todos los productos con precio desactualizado");
+		log.info(
+			"Recalculando todos los productos con precio desactualizado"
+		);
 
-		List<Product> outdatedProducts = productRepository.findByPriceStatus(PriceStatus.OUTDATED);
+		List<Product> outdatedProducts =
+			productRepository.findByPriceStatus(
+				PriceStatus.OUTDATED
+			);
+
 		int recalculedCount = 0;
 
 		for (Product product : outdatedProducts) {
 			try {
 				recalculatePrice(product);
-				product.setPriceStatus(PriceStatus.CURRENT);
-				product.setStatus(ProductStatus.INACTIVE);
+
+				product.setPriceStatus(
+					PriceStatus.CURRENT
+				);
+
+				product.setStatus(
+					ProductStatus.INACTIVE
+				);
+
 				productRepository.save(product);
+
 				recalculedCount++;
+
 			} catch (Exception e) {
-				log.error("Error al recalcular producto {}: {}", product.getId(), e.getMessage());
+				log.error(
+					"Error al recalcular producto {}: {}",
+					product.getId(),
+					e.getMessage()
+				);
 			}
 		}
 
@@ -181,68 +304,180 @@ public class ProductService {
 	}
 
 	@Transactional(readOnly = true)
-	public Page<ProductPublicResponse> getPublicCatalog(Specification<Product> spec, Pageable pageable) {
-		Specification<Product> publicSpec = Specification.where(spec)
-			.and((root, query, cb) -> cb.equal(root.get("status"), ProductStatus.ACTIVE))
-			.and((root, query, cb) -> cb.equal(root.get("priceStatus"), PriceStatus.CURRENT));
+	public Page<ProductPublicResponse> getPublicCatalog(
+			Specification<Product> spec,
+			Pageable pageable) {
 
-		return productRepository.findAll(publicSpec, pageable).map(this::mapToPublicResponse);
+		Specification<Product> publicSpec =
+			Specification.where(spec)
+				.and(
+					(root, query, cb) ->
+						cb.equal(
+							root.get("status"),
+							ProductStatus.ACTIVE
+						)
+				)
+				.and(
+					(root, query, cb) ->
+						cb.equal(
+							root.get("priceStatus"),
+							PriceStatus.CURRENT
+						)
+				);
+
+		return productRepository
+			.findAll(publicSpec, pageable)
+			.map(this::mapToPublicResponse);
 	}
 
 	@Transactional(readOnly = true)
-	public Page<ProductResponse> getAdminProducts(Specification<Product> spec, Pageable pageable) {
-		return productRepository.findAll(spec, pageable).map(this::mapToResponse);
+	public Page<ProductResponse> getAdminProducts(
+			Specification<Product> spec,
+			Pageable pageable) {
+
+		return productRepository
+			.findAll(spec, pageable)
+			.map(this::mapToResponse);
 	}
 
 	@Transactional
-	public void markProductsAsOutdatedByFilament(Long idFilament) {
-		log.info("Marcando productos como OUTDATED por cambio en filamento: {}", idFilament);
+	public void markProductsAsOutdatedByFilament(
+			Long idFilament) {
 
-		List<Product> products = productRepository.findByIdFilament(idFilament);
+		log.info(
+			"Marcando productos como OUTDATED por cambio en filamento: {}",
+			idFilament
+		);
+
+		List<Product> products =
+			productRepository.findByIdFilament(
+				idFilament
+			);
+
 		for (Product product : products) {
-			if (product.getPriceStatus() == PriceStatus.CURRENT) {
-				product.setPriceStatus(PriceStatus.OUTDATED);
-				product.setStatus(ProductStatus.INACTIVE);
+			if (
+				product.getPriceStatus() ==
+				PriceStatus.CURRENT
+			) {
+				product.setPriceStatus(
+					PriceStatus.OUTDATED
+				);
+
+				product.setStatus(
+					ProductStatus.INACTIVE
+				);
+
 				productRepository.save(product);
 			}
 		}
 	}
 
-	private void recalculatePrice(Product product) {
-		FilamentResponse filament = configServiceClient.getFilamentById(product.getIdFilament());
-		PrintingConfigResponse printingConfig = configServiceClient.getPrintingConfig();
-
-		PriceCalculator.PriceBreakdown breakdown = PriceCalculator.calculate(
-			product.getFilamentGrams(),
-			filament.getPricePerKg(),
-			product.getPrintingHours(),
-			printingConfig.getPrinterConsumptionKwh(),
-			printingConfig.getElectricityPriceKwh(),
-			product.getProfitPercentage()
+	@Transactional
+	public void markAllProductsAsOutdated() {
+		log.info(
+			"Marcando todos los productos como OUTDATED por cambio en configuración de impresión"
 		);
 
-		product.setFilamentPriceSnapshot(filament.getPricePerKg());
-		product.setElectricityPriceSnapshot(printingConfig.getElectricityPriceKwh());
-		product.setConsumptionKwhSnapshot(printingConfig.getPrinterConsumptionKwh());
+		List<Product> products =
+			productRepository.findAll();
 
-		product.setMaterialCost(breakdown.materialCost());
-		product.setElectricityCost(breakdown.electricityCost());
-		product.setBaseCost(breakdown.baseCost());
-		product.setProfitAmount(breakdown.profitAmount());
-		product.setFinalPrice(breakdown.finalPrice());
+		for (Product product : products) {
+			if (
+				product.getPriceStatus() ==
+				PriceStatus.CURRENT
+			) {
+				product.setPriceStatus(
+					PriceStatus.OUTDATED
+				);
+
+				product.setStatus(
+					ProductStatus.INACTIVE
+				);
+
+				productRepository.save(product);
+			}
+		}
+	}
+
+	private boolean hasChanged(
+			BigDecimal currentValue,
+			BigDecimal newValue) {
+
+		if (currentValue == null && newValue == null) {
+			return false;
+		}
+
+		if (currentValue == null || newValue == null) {
+			return true;
+		}
+
+		return currentValue.compareTo(newValue) != 0;
+	}
+
+	private void recalculatePrice(Product product) {
+		FilamentResponse filament =
+			configServiceClient.getFilamentById(
+				product.getIdFilament()
+			);
+
+		PrintingConfigResponse printingConfig =
+			configServiceClient.getPrintingConfig();
+
+		PriceCalculator.PriceBreakdown breakdown =
+			PriceCalculator.calculate(
+				product.getFilamentGrams(),
+				filament.getPricePerKg(),
+				product.getPrintingHours(),
+				printingConfig.getPrinterConsumptionKwh(),
+				printingConfig.getElectricityPriceKwh(),
+				product.getProfitPercentage()
+			);
+
+		product.setFilamentPriceSnapshot(
+			filament.getPricePerKg()
+		);
+
+		product.setElectricityPriceSnapshot(
+			printingConfig.getElectricityPriceKwh()
+		);
+
+		product.setConsumptionKwhSnapshot(
+			printingConfig.getPrinterConsumptionKwh()
+		);
+
+		product.setMaterialCost(
+			breakdown.materialCost()
+		);
+
+		product.setElectricityCost(
+			breakdown.electricityCost()
+		);
+
+		product.setBaseCost(
+			breakdown.baseCost()
+		);
+
+		product.setProfitAmount(
+			breakdown.profitAmount()
+		);
+
+		product.setFinalPrice(
+			breakdown.finalPrice()
+		);
 	}
 
 	private ProductResponse mapToResponse(Product product) {
-		ProductPriceResponse price = new ProductPriceResponse(
-			product.getFilamentPriceSnapshot(),
-			product.getElectricityPriceSnapshot(),
-			product.getConsumptionKwhSnapshot(),
-			product.getMaterialCost(),
-			product.getElectricityCost(),
-			product.getBaseCost(),
-			product.getProfitAmount(),
-			product.getFinalPrice()
-		);
+		ProductPriceResponse price =
+			new ProductPriceResponse(
+				product.getFilamentPriceSnapshot(),
+				product.getElectricityPriceSnapshot(),
+				product.getConsumptionKwhSnapshot(),
+				product.getMaterialCost(),
+				product.getElectricityCost(),
+				product.getBaseCost(),
+				product.getProfitAmount(),
+				product.getFinalPrice()
+			);
 
 		return new ProductResponse(
 			product.getId(),
@@ -262,7 +497,9 @@ public class ProductService {
 		);
 	}
 
-	private ProductPublicResponse mapToPublicResponse(Product product) {
+	private ProductPublicResponse mapToPublicResponse(
+			Product product) {
+
 		return new ProductPublicResponse(
 			product.getId(),
 			product.getName(),

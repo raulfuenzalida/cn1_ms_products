@@ -8,78 +8,159 @@ import duoc.cn1.ms_products.exception.FilamentNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
-import java.time.Duration;
-
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class ConfigServiceClient {
 
-	private final RestTemplate restTemplate;
+    private final RestTemplate restTemplate;
 
-	@Value("${ms-config.base-url}")
-	private String baseUrl;
+    @Value("${ms-config.base-url}")
+    private String baseUrl;
 
-	@Value("${ms-config.connect-timeout-ms:3000}")
-	private int connectTimeout;
+    public FilamentResponse getFilamentById(Long id) {
+        String url = baseUrl + "/api/v1/config/filaments/" + id;
+        log.debug("Consultando filamento en ms-config: {}", url);
 
-	@Value("${ms-config.read-timeout-ms:5000}")
-	private int readTimeout;
+        try {
+            ResponseEntity<FilamentResponse> response = restTemplate.exchange(
+                    url,
+                    HttpMethod.GET,
+                    createAuthenticatedEntity(),
+                    FilamentResponse.class
+            );
 
-	public FilamentResponse getFilamentById(Long id) {
-		String url = baseUrl + "/api/v1/config/filaments/" + id;
-		log.debug("Consultando filamento en ms-config: {}", url);
+            FilamentResponse filament = response.getBody();
 
-		try {
-			FilamentResponse response = restTemplate.getForObject(url, FilamentResponse.class);
-			if (response == null) {
-				throw new FilamentNotFoundException(id);
-			}
-			if (response.getStatus() != FilamentResponse.FilamentStatus.ACTIVE) {
-				throw new FilamentInactiveException(id);
-			}
-			return response;
-		} catch (HttpClientErrorException.NotFound e) {
-			log.warn("Filamento no encontrado en ms-config: {}", id);
-			throw new FilamentNotFoundException(id);
-		} catch (HttpClientErrorException e) {
-			log.error("Error cliente al consultar filamento en ms-config: {}", e.getStatusCode());
-			throw new ConfigServiceUnavailableException("Error al comunicarse con ms-config: " + e.getStatusCode());
-		} catch (HttpServerErrorException e) {
-			log.error("Error servidor en ms-config: {}", e.getStatusCode());
-			throw new ConfigServiceUnavailableException("Error en ms-config: " + e.getStatusCode());
-		} catch (ResourceAccessException e) {
-			log.error("Error de conexión con ms-config: {}", e.getMessage());
-			throw new ConfigServiceUnavailableException("No es posible conectar con ms-config");
-		}
-	}
+            if (filament == null) {
+                throw new FilamentNotFoundException(id);
+            }
 
-	public PrintingConfigResponse getPrintingConfig() {
-		String url = baseUrl + "/api/v1/config/printing";
-		log.debug("Consultando configuración de impresión en ms-config: {}", url);
+            if (filament.getStatus() != FilamentResponse.FilamentStatus.ACTIVE) {
+                throw new FilamentInactiveException(id);
+            }
 
-		try {
-			PrintingConfigResponse response = restTemplate.getForObject(url, PrintingConfigResponse.class);
-			if (response == null) {
-				throw new ConfigServiceUnavailableException("Configuración de impresión no disponible");
-			}
-			return response;
-		} catch (HttpClientErrorException e) {
-			log.error("Error cliente al consultar configuración en ms-config: {}", e.getStatusCode());
-			throw new ConfigServiceUnavailableException("Error al comunicarse con ms-config: " + e.getStatusCode());
-		} catch (HttpServerErrorException e) {
-			log.error("Error servidor en ms-config: {}", e.getStatusCode());
-			throw new ConfigServiceUnavailableException("Error en ms-config: " + e.getStatusCode());
-		} catch (ResourceAccessException e) {
-			log.error("Error de conexión con ms-config: {}", e.getMessage());
-			throw new ConfigServiceUnavailableException("No es posible conectar con ms-config");
-		}
-	}
+            return filament;
+
+        } catch (HttpClientErrorException.NotFound e) {
+            log.warn("Filamento no encontrado en ms-config: {}", id);
+            throw new FilamentNotFoundException(id);
+
+        } catch (HttpClientErrorException e) {
+            log.error(
+                    "Error cliente al consultar filamento en ms-config: {}",
+                    e.getStatusCode()
+            );
+            throw new ConfigServiceUnavailableException(
+                    "Error al comunicarse con ms-config: " + e.getStatusCode()
+            );
+
+        } catch (HttpServerErrorException e) {
+            log.error(
+                    "Error servidor en ms-config: {}",
+                    e.getStatusCode()
+            );
+            throw new ConfigServiceUnavailableException(
+                    "Error en ms-config: " + e.getStatusCode()
+            );
+
+        } catch (ResourceAccessException e) {
+            log.error(
+                    "Error de conexión con ms-config: {}",
+                    e.getMessage()
+            );
+            throw new ConfigServiceUnavailableException(
+                    "No es posible conectar con ms-config"
+            );
+        }
+    }
+
+    public PrintingConfigResponse getPrintingConfig() {
+        String url = baseUrl + "/api/v1/config/printing";
+        log.debug(
+                "Consultando configuración de impresión en ms-config: {}",
+                url
+        );
+
+        try {
+            ResponseEntity<PrintingConfigResponse> response =
+                    restTemplate.exchange(
+                            url,
+                            HttpMethod.GET,
+                            createAuthenticatedEntity(),
+                            PrintingConfigResponse.class
+                    );
+
+            PrintingConfigResponse printingConfig = response.getBody();
+
+            if (printingConfig == null) {
+                throw new ConfigServiceUnavailableException(
+                        "Configuración de impresión no disponible"
+                );
+            }
+
+            return printingConfig;
+
+        } catch (HttpClientErrorException e) {
+            log.error(
+                    "Error cliente al consultar configuración en ms-config: {}",
+                    e.getStatusCode()
+            );
+            throw new ConfigServiceUnavailableException(
+                    "Error al comunicarse con ms-config: " + e.getStatusCode()
+            );
+
+        } catch (HttpServerErrorException e) {
+            log.error(
+                    "Error servidor en ms-config: {}",
+                    e.getStatusCode()
+            );
+            throw new ConfigServiceUnavailableException(
+                    "Error en ms-config: " + e.getStatusCode()
+            );
+
+        } catch (ResourceAccessException e) {
+            log.error(
+                    "Error de conexión con ms-config: {}",
+                    e.getMessage()
+            );
+            throw new ConfigServiceUnavailableException(
+                    "No es posible conectar con ms-config"
+            );
+        }
+    }
+
+    private HttpEntity<Void> createAuthenticatedEntity() {
+        Authentication authentication =
+                SecurityContextHolder.getContext().getAuthentication();
+
+        if (!(authentication instanceof JwtAuthenticationToken jwtAuthentication)) {
+            log.error(
+                    "No existe un JWT autenticado disponible para llamar a ms-config"
+            );
+            throw new ConfigServiceUnavailableException(
+                    "No existe un token de autenticación para comunicarse con ms-config"
+            );
+        }
+
+        String accessToken = jwtAuthentication.getToken().getTokenValue();
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setBearerAuth(accessToken);
+
+        return new HttpEntity<>(headers);
+    }
 }
