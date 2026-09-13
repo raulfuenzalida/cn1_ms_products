@@ -41,17 +41,26 @@ public class ProductController {
 			@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "20") int size) {
 
-		Specification<duoc.cn1.ms_products.model.Product> spec = buildPublicCatalogSpec(name, minPrice, maxPrice);
-		Pageable pageable = buildPageable(sortBy, sortOrder, page, size);
+		Specification<duoc.cn1.ms_products.model.Product> spec =
+			buildPublicCatalogSpec(name, minPrice, maxPrice);
 
-		Page<ProductPublicResponse> result = productService.getPublicCatalog(spec, pageable);
+		Pageable pageable =
+			buildPageable(sortBy, sortOrder, page, size);
+
+		Page<ProductPublicResponse> result =
+			productService.getPublicCatalog(spec, pageable);
+
 		return ResponseEntity.ok(result);
 	}
 
 	@GetMapping("/{id}")
 	@Operation(summary = "Obtener producto público por ID", description = "Retorna un producto activo con precio actual")
-	public ResponseEntity<ProductPublicResponse> getPublicProductById(@PathVariable Long id) {
-		return ResponseEntity.ok(productService.getPublicProductById(id));
+	public ResponseEntity<ProductPublicResponse> getPublicProductById(
+			@PathVariable Long id) {
+
+		return ResponseEntity.ok(
+			productService.getPublicProductById(id)
+		);
 	}
 
 	@GetMapping("/admin")
@@ -63,23 +72,38 @@ public class ProductController {
 			@RequestParam(defaultValue = "0") int page,
 			@RequestParam(defaultValue = "20") int size) {
 
-		Specification<duoc.cn1.ms_products.model.Product> spec = buildAdminSpec(name);
-		Pageable pageable = buildPageable(sortBy, sortOrder, page, size);
+		Specification<duoc.cn1.ms_products.model.Product> spec =
+			buildAdminSpec(name);
 
-		return ResponseEntity.ok(productService.getAdminProducts(spec, pageable));
+		Pageable pageable =
+			buildPageable(sortBy, sortOrder, page, size);
+
+		return ResponseEntity.ok(
+			productService.getAdminProducts(spec, pageable)
+		);
 	}
 
 	@GetMapping("/admin/{id}")
 	@Operation(summary = "Obtener producto por ID (admin)", description = "Retorna un producto sin filtrar por estado")
-	public ResponseEntity<ProductResponse> getAdminProductById(@PathVariable Long id) {
-		return ResponseEntity.ok(productService.getProductById(id));
+	public ResponseEntity<ProductResponse> getAdminProductById(
+			@PathVariable Long id) {
+
+		return ResponseEntity.ok(
+			productService.getProductById(id)
+		);
 	}
 
 	@PostMapping
 	@Operation(summary = "Crear producto", description = "Crea un nuevo producto calculando su precio automáticamente")
-	public ResponseEntity<ProductResponse> createProduct(@Valid @RequestBody ProductCreateRequest request) {
-		ProductResponse response = productService.createProduct(request);
-		return ResponseEntity.status(org.springframework.http.HttpStatus.CREATED).body(response);
+	public ResponseEntity<ProductResponse> createProduct(
+			@Valid @RequestBody ProductCreateRequest request) {
+
+		ProductResponse response =
+			productService.createProduct(request);
+
+		return ResponseEntity
+			.status(org.springframework.http.HttpStatus.CREATED)
+			.body(response);
 	}
 
 	@PutMapping("/{id}")
@@ -87,7 +111,10 @@ public class ProductController {
 	public ResponseEntity<ProductResponse> updateProduct(
 			@PathVariable Long id,
 			@Valid @RequestBody ProductUpdateRequest request) {
-		return ResponseEntity.ok(productService.updateProduct(id, request));
+
+		return ResponseEntity.ok(
+			productService.updateProduct(id, request)
+		);
 	}
 
 	@PatchMapping("/{id}/status")
@@ -95,67 +122,160 @@ public class ProductController {
 	public ResponseEntity<ProductResponse> updateProductStatus(
 			@PathVariable Long id,
 			@Valid @RequestBody ProductStatusUpdateRequest request) {
-		return ResponseEntity.ok(productService.updateProductStatus(id, request.getStatus()));
+
+		return ResponseEntity.ok(
+			productService.updateProductStatus(
+				id,
+				request.getStatus()
+			)
+		);
 	}
 
 	@PostMapping("/{id}/recalculate")
 	@Operation(summary = "Recalcular precio del producto", description = "Recalcula el precio de un producto con configuración actual")
-	public ResponseEntity<RecalculationResultResponse> recalculateProduct(@PathVariable Long id) {
-		return ResponseEntity.ok(productService.recalculateProduct(id));
+	public ResponseEntity<RecalculationResultResponse> recalculateProduct(
+			@PathVariable Long id) {
+
+		return ResponseEntity.ok(
+			productService.recalculateProduct(id)
+		);
 	}
 
 	@PostMapping("/recalculate-outdated")
 	@Operation(summary = "Recalcular productos desactualizados", description = "Recalcula todos los productos con precio OUTDATED")
 	public ResponseEntity<RecalculationResultResponse> recalculateOutdatedProducts() {
-		return ResponseEntity.ok(productService.recalculateOutdatedProducts());
+
+		return ResponseEntity.ok(
+			productService.recalculateOutdatedProducts()
+		);
 	}
 
-	private Specification<duoc.cn1.ms_products.model.Product> buildPublicCatalogSpec(String name, BigDecimal minPrice, BigDecimal maxPrice) {
-		Specification<duoc.cn1.ms_products.model.Product> spec = Specification.where(null);
+	@PostMapping("/internal/invalidate/filament/{idFilament}")
+	@Operation(
+		summary = "Invalidar productos por filamento",
+		description = "Marca como OUTDATED e INACTIVE los productos asociados a un filamento modificado"
+	)
+	public ResponseEntity<Void> invalidateProductsByFilament(
+			@PathVariable Long idFilament) {
+
+		productService.markProductsAsOutdatedByFilament(
+			idFilament
+		);
+
+		return ResponseEntity.noContent().build();
+	}
+
+	@PostMapping("/internal/invalidate/printing")
+	@Operation(
+		summary = "Invalidar productos por configuración de impresión",
+		description = "Marca todos los productos como OUTDATED e INACTIVE cuando cambia la configuración de impresión"
+	)
+	public ResponseEntity<Void> invalidateProductsByPrintingConfig() {
+
+		productService.markAllProductsAsOutdated();
+
+		return ResponseEntity.noContent().build();
+	}
+
+	private Specification<duoc.cn1.ms_products.model.Product> buildPublicCatalogSpec(
+			String name,
+			BigDecimal minPrice,
+			BigDecimal maxPrice) {
+
+		Specification<duoc.cn1.ms_products.model.Product> spec =
+			Specification.where(null);
 
 		if (name != null && !name.isBlank()) {
-			spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("name")), "%" + name.toLowerCase() + "%"));
+			spec = spec.and(
+				(root, query, cb) ->
+					cb.like(
+						cb.lower(root.get("name")),
+						"%" + name.toLowerCase() + "%"
+					)
+			);
 		}
 
 		if (minPrice != null) {
-			spec = spec.and((root, query, cb) -> cb.greaterThanOrEqualTo(root.get("finalPrice"), minPrice));
+			spec = spec.and(
+				(root, query, cb) ->
+					cb.greaterThanOrEqualTo(
+						root.get("finalPrice"),
+						minPrice
+					)
+			);
 		}
 
 		if (maxPrice != null) {
-			spec = spec.and((root, query, cb) -> cb.lessThanOrEqualTo(root.get("finalPrice"), maxPrice));
+			spec = spec.and(
+				(root, query, cb) ->
+					cb.lessThanOrEqualTo(
+						root.get("finalPrice"),
+						maxPrice
+					)
+			);
 		}
 
 		return spec;
 	}
 
-	private Specification<duoc.cn1.ms_products.model.Product> buildAdminSpec(String name) {
-		Specification<duoc.cn1.ms_products.model.Product> spec = Specification.where(null);
+	private Specification<duoc.cn1.ms_products.model.Product> buildAdminSpec(
+			String name) {
+
+		Specification<duoc.cn1.ms_products.model.Product> spec =
+			Specification.where(null);
 
 		if (name != null && !name.isBlank()) {
-			spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("name")), "%" + name.toLowerCase() + "%"));
+			spec = spec.and(
+				(root, query, cb) ->
+					cb.like(
+						cb.lower(root.get("name")),
+						"%" + name.toLowerCase() + "%"
+					)
+			);
 		}
 
 		return spec;
 	}
 
-	private Pageable buildPageable(String sortBy, String sortOrder, int page, int size) {
+	private Pageable buildPageable(
+			String sortBy,
+			String sortOrder,
+			int page,
+			int size) {
+
 		Sort sort = Sort.unsorted();
 
 		if (sortBy != null && !sortBy.isBlank()) {
 			Sort.Direction direction = Sort.Direction.ASC;
-			if (sortOrder != null && sortOrder.equalsIgnoreCase("DESC")) {
+
+			if (
+				sortOrder != null &&
+				sortOrder.equalsIgnoreCase("DESC")
+			) {
 				direction = Sort.Direction.DESC;
 			}
 
 			String fieldName = sortBy.toLowerCase();
-			if (fieldName.equals("name") || fieldName.equals("price")) {
+
+			if (
+				fieldName.equals("name") ||
+				fieldName.equals("price")
+			) {
 				if (fieldName.equals("price")) {
 					fieldName = "finalPrice";
 				}
-				sort = Sort.by(direction, fieldName);
+
+				sort = Sort.by(
+					direction,
+					fieldName
+				);
 			}
 		}
 
-		return PageRequest.of(page, size, sort);
+		return PageRequest.of(
+			page,
+			size,
+			sort
+		);
 	}
 }
