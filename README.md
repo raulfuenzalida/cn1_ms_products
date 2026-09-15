@@ -332,7 +332,8 @@ RoundingMode.HALF_UP
 
 ### Públicos
 
-No requieren autenticación.
+- `GET /api/v1/products/obtener` - Catálogo público (solo productos ACTIVE + CURRENT)
+- `GET /api/v1/products/obtener/{id}` - Obtener producto público por ID
 
 ```http
 GET /api/v1/products
@@ -507,16 +508,10 @@ El ID Token no se acepta como sustituto del Access Token.
 
 ### Endpoints Públicos
 
-El catálogo público permite acceso sin autenticación a las operaciones de consulta pública de productos.
-
-También se permite acceso a la documentación de API según la configuración de seguridad:
-
-```text
-/api-docs/**
-/swagger-ui/**
-```
-
-### Endpoints Administrativos
+- `GET /api/v1/products/obtener`
+- `GET /api/v1/products/obtener/{id}`
+- `/api-docs/**`
+- `/swagger-ui/**`
 
 Las operaciones administrativas requieren un Access Token válido.
 
