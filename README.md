@@ -117,8 +117,8 @@ docker-compose up -d
 
 ### Públicos (sin autenticación)
 
-- `GET /api/v1/products` - Catálogo público (solo productos ACTIVE + CURRENT)
-- `GET /api/v1/products/{id}` - Obtener producto público por ID
+- `GET /api/v1/products/obtener` - Catálogo público (solo productos ACTIVE + CURRENT)
+- `GET /api/v1/products/obtener/{id}` - Obtener producto público por ID
 
 ### Administrativos (requieren Access Token)
 
@@ -181,8 +181,8 @@ El microservicio utiliza Spring Security como OAuth2 Resource Server.
 
 ### Endpoints Públicos
 
-- `GET /api/v1/products`
-- `GET /api/v1/products/{id}`
+- `GET /api/v1/products/obtener`
+- `GET /api/v1/products/obtener/{id}`
 - `/api-docs/**`
 - `/swagger-ui/**`
 

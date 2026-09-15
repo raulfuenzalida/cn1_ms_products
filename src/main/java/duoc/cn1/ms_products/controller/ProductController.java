@@ -30,7 +30,7 @@ public class ProductController {
 
 	private final ProductService productService;
 
-	@GetMapping
+	@GetMapping("/obtener")
 	@Operation(summary = "Obtener catálogo público", description = "Retorna productos activos con precio actual")
 	public ResponseEntity<Page<ProductPublicResponse>> getPublicCatalog(
 			@RequestParam(required = false) String name,
@@ -53,7 +53,7 @@ public class ProductController {
 		return ResponseEntity.ok(result);
 	}
 
-	@GetMapping("/{id}")
+	@GetMapping("/obtener/{id}")
 	@Operation(summary = "Obtener producto público por ID", description = "Retorna un producto activo con precio actual")
 	public ResponseEntity<ProductPublicResponse> getPublicProductById(
 			@PathVariable Long id) {
@@ -93,7 +93,7 @@ public class ProductController {
 		);
 	}
 
-	@PostMapping
+	@PostMapping("/admin")
 	@Operation(summary = "Crear producto", description = "Crea un nuevo producto calculando su precio automáticamente")
 	public ResponseEntity<ProductResponse> createProduct(
 			@Valid @RequestBody ProductCreateRequest request) {
