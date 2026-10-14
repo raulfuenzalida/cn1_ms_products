@@ -6,7 +6,6 @@ import duoc.cn1.ms_products.dto.request.ProductUpdateRequest;
 import duoc.cn1.ms_products.dto.response.ProductPublicResponse;
 import duoc.cn1.ms_products.dto.response.ProductResponse;
 import duoc.cn1.ms_products.dto.response.RecalculationResultResponse;
-import duoc.cn1.ms_products.model.ProductSort;
 import duoc.cn1.ms_products.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
