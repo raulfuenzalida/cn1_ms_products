@@ -9,7 +9,9 @@ import duoc.cn1.ms_products.dto.response.ProductPriceResponse;
 import duoc.cn1.ms_products.dto.response.ProductPublicResponse;
 import duoc.cn1.ms_products.dto.response.ProductResponse;
 import duoc.cn1.ms_products.dto.response.RecalculationResultResponse;
+import duoc.cn1.ms_products.event.ProductCreatedEvent;
 import duoc.cn1.ms_products.exception.ProductNotFoundException;
+import duoc.cn1.ms_products.messaging.ProductEventPublisher;
 import duoc.cn1.ms_products.model.PriceStatus;
 import duoc.cn1.ms_products.model.Product;
 import duoc.cn1.ms_products.model.ProductStatus;
@@ -32,6 +34,7 @@ public class ProductService {
 
 	private final ProductRepository productRepository;
 	private final ConfigServiceClient configServiceClient;
+	private final ProductEventPublisher productEventPublisher;
 
 	@Transactional
 	public ProductResponse createProduct(ProductCreateRequest request) {
@@ -81,6 +84,20 @@ public class ProductService {
 		Product saved = productRepository.save(product);
 
 		log.info("Producto creado con ID: {}", saved.getId());
+
+		ProductCreatedEvent event = new ProductCreatedEvent(
+			saved.getId(),
+			saved.getName(),
+			saved.getDescription(),
+			filament.getName(),
+			saved.getFilamentGrams(),
+			saved.getPrintingHours(),
+			saved.getFinalPrice().intValue(),
+			saved.getStatus().name(),
+			saved.getCreatedAt()
+		);
+
+		productEventPublisher.publishProductCreated(event);
 
 		return mapToResponse(saved);
 	}

@@ -41,11 +41,200 @@ Invalidación de precios cuando cambian costos
 
 Cada microservicio continúa siendo el único responsable de modificar su propia base de datos.
 
+## Integración con RabbitMQ
+
+`ms-products` actúa como **productor** de eventos en RabbitMQ para notificar la creación de nuevos productos.
+
+### Propósito
+
+Cuando se crea un producto exitosamente, `ms-products` publica un evento `product.created` en un exchange de tipo `topic`. Este evento permite que otros microservicios (como `ms-notifications`) reaccionen de forma asíncrona a la creación de productos, por ejemplo para generar fichas PDF o enviar correos.
+
+### Arquitectura
+
+```text
+front_admin
+    |
+    | POST /api/v1/products
+    v
+ms-products
+    |
+    +--> Guarda producto en products_db
+    |
+    +--> Publica product.created
+              |
+              v
+       printworks.events
+        TOPIC EXCHANGE
+```
+
+### Configuración RabbitMQ
+
+#### Variables de Entorno
+
+```env
+# Configuración de RabbitMQ
+RABBITMQ_HOST=localhost
+RABBITMQ_PORT=5672
+RABBITMQ_USERNAME=guest
+RABBITMQ_PASSWORD=guest
+```
+
+#### application.yml
+
+```yaml
+spring:
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+
+rabbitmq:
+  exchanges:
+    events: printworks.events
+  routing-keys:
+    product-created: product.created
+```
+
+### Convenciones
+
+- **Exchange principal:** `printworks.events`
+- **Tipo de exchange:** `topic`
+- **Routing key de creación:** `product.created`
+- **Rol de ms-products:** Producer (productor de eventos)
+
+### Evento ProductCreatedEvent
+
+El evento `ProductCreatedEvent` transporta los datos necesarios para que consumidores posteriores puedan trabajar sin consultar nuevamente `ms-products` ni `products_db`.
+
+#### Contrato JSON
+
+```json
+{
+  "productId": 15,
+  "name": "Soporte para notebook",
+  "description": "Soporte ajustable para notebook",
+  "filamentName": "PLA Blanco",
+  "grams": 150,
+  "printingHours": 4,
+  "price": 8990,
+  "status": "INACTIVE",
+  "createdAt": "2026-10-13T15:20:00"
+}
+```
+
+#### Campos
+
+- `productId`: ID del producto creado
+- `name`: Nombre del producto
+- `description`: Descripción del producto
+- `filamentName`: Nombre del filamento (obtenido desde ms-config durante la creación)
+- `grams`: Gramos de filamento (valor de dominio, sin formato de presentación)
+- `printingHours`: Horas de impresión (valor de dominio, sin formato de presentación)
+- `price`: Precio final en CLP (valor entero, sin formato de presentación)
+- `status`: Estado comercial del producto (ACTIVE/INACTIVE)
+- `createdAt`: Fecha de creación del producto
+
+**Nota:** Los valores se publican sin formato de presentación (ej: `8990` en lugar de `"$8.990"`). El formato visual es responsabilidad de los consumidores.
+
+### Flujo de Creación con Evento
+
+```text
+ProductService.createProduct(...)
+        |
+        +--> validaciones actuales
+        +--> cálculos actuales
+        +--> productRepository.save(...)
+        |
+        +--> ProductEventPublisher
+        |        |
+        |        +--> product.created
+        |
+        +--> respuesta actual
+```
+
+La publicación del evento ocurre **después** de que el producto ha sido guardado exitosamente en la base de datos. Si la creación falla, no se publica ningún evento.
+
+### Componentes
+
+#### RabbitConfig
+
+Clase de configuración que:
+
+- Declara el `TopicExchange` `printworks.events`
+- Configura el conversor JSON para serialización de eventos
+
+Ubicación: `config/RabbitConfig.java`
+
+#### ProductCreatedEvent
+
+DTO/evento que representa la creación de un producto. Contiene únicamente los datos necesarios para que los consumidores trabajen de forma autosuficiente.
+
+Ubicación: `event/ProductCreatedEvent.java`
+
+#### ProductEventPublisher
+
+Componente responsable de encapsular `RabbitTemplate` y publicar eventos. No se utiliza `RabbitTemplate` directamente desde `ProductService`.
+
+Ubicación: `messaging/ProductEventPublisher.java`
+
+### Logging
+
+El flujo de publicación incluye logs para seguimiento:
+
+```text
+Producto creado con ID: 15
+Publicando evento product.created para producto ID: 15
+Evento product.created publicado correctamente
+```
+
+### Responsabilidades
+
+`ms-products` es responsable de:
+
+- Publicar el evento `product.created` al crear un producto
+- Mantener la configuración RabbitMQ separada de la lógica de negocio
+- Centralizar nombres de exchange y routing keys en configuración
+- No publicar credenciales sensibles en logs
+
+`ms-products` NO es responsable de:
+
+- Consumir eventos `product.created`
+- Generar PDFs
+- Enviar correos
+- Administrar colas o bindings dinámicamente
+- Reemplazar la API REST con RabbitMQ
+
+### Contrato de Integración
+
+El punto de integración entre `ms-products` y `ms-notifications` se define como:
+
+```text
+Exchange:    printworks.events
+Tipo:        TOPIC
+Routing key: product.created
+Payload:     ProductCreatedEvent
+```
+
+### Pruebas
+
+Para verificar la integración con RabbitMQ:
+
+1. Iniciar RabbitMQ localmente
+2. Configurar las variables de entorno de conexión
+3. Iniciar `ms-products`
+4. Crear un producto mediante el endpoint REST
+5. Verificar que el producto se guarda en MySQL
+6. Verificar que existe el exchange `printworks.events` en RabbitMQ
+7. Crear una cola temporal enlazada con `product.created` para confirmar la publicación
+8. Revisar los logs de `ms-products`
+
 ## Requisitos
 
 - Java 21
 - Maven 3.9+
 - MySQL 8.0+
+- RabbitMQ 3.12+ (para integración de eventos)
 - Docker (opcional, para despliegue)
 
 ## Configuración
@@ -69,6 +258,12 @@ JWT_ISSUER_URI=https://login.microsoftonline.com/TENANT_ID/v2.0
 
 # Cliente HTTP hacia ms-config
 MS_CONFIG_BASE_URL=http://localhost:8080
+
+# Configuración de RabbitMQ
+RABBITMQ_HOST=localhost
+RABBITMQ_PORT=5672
+RABBITMQ_USERNAME=guest
+RABBITMQ_PASSWORD=guest
 
 # CORS (lista separada por comas)
 CORS_ALLOWED_ORIGINS=http://localhost:5173,https://raulfuenzalida.github.io
@@ -721,6 +916,7 @@ Las variables específicas del entorno AWS se configuran en la definición de ta
 - Gestionar catálogo público
 - Gestionar tags
 - Gestionar imágenes de productos
+- Publicar eventos `product.created` en RabbitMQ al crear productos
 
 `ms-products` no es responsable de:
 
@@ -728,6 +924,8 @@ Las variables específicas del entorno AWS se configuran en la definición de ta
 - Administrar precios de filamentos
 - Administrar costos energéticos
 - Gestionar pedidos
+- Consumir eventos RabbitMQ
+- Generar PDFs o enviar correos (responsabilidad de ms-notifications)
 
 ## Decisiones que Requieren Configuración Oficial Futura
 
