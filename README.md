@@ -424,6 +424,33 @@ Marca como `OUTDATED + INACTIVE` todos los productos afectados por cambios en la
 
 Estos endpoints permiten que `ms-config` notifique cambios sin acceder directamente a `products_db`.
 
+### Endpoints Internos de Consulta
+
+```http
+GET /api/v1/products/internal/{id}
+```
+
+Devuelve una vista interna del producto para otros microservicios
+(`ms-orders` la usa al crear pedidos). Incluye los datos de filamento
+necesarios para el consumo de inventario:
+
+```json
+{
+  "id": 1,
+  "name": "Lámpara Mesa",
+  "finalPrice": 12990,
+  "idFilament": 3,
+  "filamentGrams": 150.00
+}
+```
+
+Reglas:
+
+- Solo devuelve productos `ACTIVE` + `CURRENT` (misma regla que el catálogo público).
+- No expone el desglose de costos del precio (eso sigue en `/admin/{id}`).
+- Es público (`permitAll`) porque `ms-orders` no tiene credenciales de servicio propias;
+  la información expuesta es de especificación del producto, no de costos.
+
 ### Tags
 
 - `GET /api/v1/tags` - Obtener todos los tags
@@ -510,6 +537,7 @@ El ID Token no se acepta como sustituto del Access Token.
 
 - `GET /api/v1/products/obtener`
 - `GET /api/v1/products/obtener/{id}`
+- `GET /api/v1/products/internal/{id}`
 - `/api-docs/**`
 - `/swagger-ui/**`
 
