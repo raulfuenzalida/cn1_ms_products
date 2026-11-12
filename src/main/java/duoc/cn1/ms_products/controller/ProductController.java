@@ -3,6 +3,7 @@ package duoc.cn1.ms_products.controller;
 import duoc.cn1.ms_products.dto.request.ProductCreateRequest;
 import duoc.cn1.ms_products.dto.request.ProductStatusUpdateRequest;
 import duoc.cn1.ms_products.dto.request.ProductUpdateRequest;
+import duoc.cn1.ms_products.dto.response.ProductInternalResponse;
 import duoc.cn1.ms_products.dto.response.ProductPublicResponse;
 import duoc.cn1.ms_products.dto.response.ProductResponse;
 import duoc.cn1.ms_products.dto.response.RecalculationResultResponse;
@@ -60,6 +61,16 @@ public class ProductController {
 
 		return ResponseEntity.ok(
 			productService.getPublicProductById(id)
+		);
+	}
+
+	@GetMapping("/internal/{id}")
+	@Operation(summary = "Obtener producto interno por ID", description = "Vista interna para otros microservicios; incluye datos de filamento para consumo de inventario")
+	public ResponseEntity<ProductInternalResponse> getInternalProductById(
+			@PathVariable Long id) {
+
+		return ResponseEntity.ok(
+			productService.getInternalProductById(id)
 		);
 	}
 

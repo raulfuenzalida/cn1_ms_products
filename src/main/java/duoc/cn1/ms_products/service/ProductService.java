@@ -5,6 +5,7 @@ import duoc.cn1.ms_products.client.dto.FilamentResponse;
 import duoc.cn1.ms_products.client.dto.PrintingConfigResponse;
 import duoc.cn1.ms_products.dto.request.ProductCreateRequest;
 import duoc.cn1.ms_products.dto.request.ProductUpdateRequest;
+import duoc.cn1.ms_products.dto.response.ProductInternalResponse;
 import duoc.cn1.ms_products.dto.response.ProductPriceResponse;
 import duoc.cn1.ms_products.dto.response.ProductPublicResponse;
 import duoc.cn1.ms_products.dto.response.ProductResponse;
@@ -104,6 +105,19 @@ public class ProductService {
 			.orElseThrow(() -> new ProductNotFoundException(id));
 
 		return mapToPublicResponse(product);
+	}
+
+	@Transactional(readOnly = true)
+	public ProductInternalResponse getInternalProductById(Long id) {
+		Product product = productRepository
+			.findByIdAndStatusAndPriceStatus(
+				id,
+				ProductStatus.ACTIVE,
+				PriceStatus.CURRENT
+			)
+			.orElseThrow(() -> new ProductNotFoundException(id));
+
+		return mapToInternalResponse(product);
 	}
 
 	@Transactional
@@ -507,6 +521,18 @@ public class ProductService {
 			product.getFinalPrice(),
 			null,
 			null
+		);
+	}
+
+	private ProductInternalResponse mapToInternalResponse(
+			Product product) {
+
+		return new ProductInternalResponse(
+			product.getId(),
+			product.getName(),
+			product.getFinalPrice(),
+			product.getIdFilament(),
+			product.getFilamentGrams()
 		);
 	}
 }
